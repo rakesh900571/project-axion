@@ -17,6 +17,9 @@ jobs:
     name: Terraform Plan
     runs-on: [self-hosted, windows, x64]
 
+    # GitHub Environment
+    environment: preprod
+
     defaults:
       run:
         working-directory: environments/preprod
