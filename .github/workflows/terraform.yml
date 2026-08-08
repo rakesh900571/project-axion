@@ -17,7 +17,7 @@ jobs:
     name: Terraform Plan
     runs-on: [self-hosted, windows, x64]
 
-    # GitHub Environment
+    # IMPORTANT: Your secrets are stored under this Environment
     environment: preprod
 
     defaults:
@@ -33,6 +33,51 @@ jobs:
       # Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+
+      # Check Azure Secrets
+      - name: Check Azure Secrets
+        shell: powershell
+        run: |
+          $missing = $false
+
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_CLIENT_ID }}")) {
+            Write-Host "ERROR: AZURE_CLIENT_ID is EMPTY"
+            $missing = $true
+          }
+          else {
+            Write-Host "AZURE_CLIENT_ID is available"
+          }
+
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_CLIENT_SECRET }}")) {
+            Write-Host "ERROR: AZURE_CLIENT_SECRET is EMPTY"
+            $missing = $true
+          }
+          else {
+            Write-Host "AZURE_CLIENT_SECRET is available"
+          }
+
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_SUBSCRIPTION_ID }}")) {
+            Write-Host "ERROR: AZURE_SUBSCRIPTION_ID is EMPTY"
+            $missing = $true
+          }
+          else {
+            Write-Host "AZURE_SUBSCRIPTION_ID is available"
+          }
+
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_TENANT_ID }}")) {
+            Write-Host "ERROR: AZURE_TENANT_ID is EMPTY"
+            $missing = $true
+          }
+          else {
+            Write-Host "AZURE_TENANT_ID is available"
+          }
+
+          if ($missing) {
+            Write-Error "One or more Azure secrets are missing."
+            exit 1
+          }
+
+          Write-Host "All Azure secrets are available."
 
       # Azure Login
       - name: Azure Login
@@ -59,19 +104,19 @@ jobs:
           az account set `
             --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
 
-      # Verify Azure Subscription
+      # Verify Subscription
       - name: Verify Azure Subscription
         shell: powershell
         run: |
           az account show
 
-      # Terraform Format Check
+      # Terraform Format
       - name: Terraform Format
         shell: powershell
         run: |
           terraform fmt -check -recursive
 
-      # Terraform Initialize
+      # Terraform Init
       - name: Terraform Init
         shell: powershell
         run: |
