@@ -15,7 +15,7 @@ permissions:
 jobs:
   terraform-plan:
     name: Terraform Plan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows, x64]
 
     defaults:
       run:
@@ -27,7 +27,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Install Terraform
+      # Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
@@ -45,31 +45,43 @@ jobs:
 
       # Verify Azure Login
       - name: Check Azure Account
-        run: az account show
+        shell: powershell
+        run: |
+          az account show
 
       # Set Azure Subscription
       - name: Set Azure Subscription
+        shell: powershell
         run: |
-          az account set \
+          az account set `
             --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
 
-      # Verify Subscription
+      # Verify Azure Subscription
       - name: Verify Azure Subscription
+        shell: powershell
         run: |
           az account show
 
       # Terraform Format Check
       - name: Terraform Format
-        run: terraform fmt -check -recursive
+        shell: powershell
+        run: |
+          terraform fmt -check -recursive
 
       # Terraform Initialize
       - name: Terraform Init
-        run: terraform init
+        shell: powershell
+        run: |
+          terraform init
 
       # Terraform Validate
       - name: Terraform Validate
-        run: terraform validate
+        shell: powershell
+        run: |
+          terraform validate
 
       # Terraform Plan
       - name: Terraform Plan
-        run: terraform plan
+        shell: powershell
+        run: |
+          terraform plan
