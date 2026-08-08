@@ -34,6 +34,28 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      # Check Azure Secrets
+      - name: Check Azure Secrets
+        shell: powershell
+        run: |
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_CLIENT_ID }}")) {
+            Write-Error "AZURE_CLIENT_ID is EMPTY"
+          }
+
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_CLIENT_SECRET }}")) {
+            Write-Error "AZURE_CLIENT_SECRET is EMPTY"
+          }
+
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_SUBSCRIPTION_ID }}")) {
+            Write-Error "AZURE_SUBSCRIPTION_ID is EMPTY"
+          }
+
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_TENANT_ID }}")) {
+            Write-Error "AZURE_TENANT_ID is EMPTY"
+          }
+
+          Write-Host "All Azure secrets are available."
+
       # Azure Login
       - name: Azure Login
         uses: azure/login@v2
