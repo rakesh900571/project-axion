@@ -13,11 +13,14 @@ permissions:
   contents: read
 
 jobs:
+
+  # =========================================================
+  # TERRAFORM PLAN
+  # =========================================================
   terraform-plan:
     name: Terraform Plan
     runs-on: [self-hosted, windows, x64]
 
-    # IMPORTANT: Your secrets are stored under this Environment
     environment: preprod
 
     defaults:
@@ -132,4 +135,78 @@ jobs:
       - name: Terraform Plan
         shell: powershell
         run: |
-          terraform plan
+          terraform plan -out=tfplan
+
+      # Upload Terraform Plan
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: environments/preprod/tfplan
+
+
+  # =========================================================
+  # TERRAFORM APPLY
+  # =========================================================
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: [self-hosted, windows, x64]
+
+    needs: terraform-plan
+
+    # Apply only on push to main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    environment: preprod
+
+    defaults:
+      run:
+        working-directory: environments/preprod
+
+    steps:
+
+      # Checkout Repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # Azure Login
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+            }
+
+      # Set Azure Subscription
+      - name: Set Azure Subscription
+        shell: powershell
+        run: |
+          az account set `
+            --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+      # Terraform Init
+      - name: Terraform Init
+        shell: powershell
+        run: |
+          terraform init
+
+      # Download Terraform Plan
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan
+          path: environments/preprod
+
+      # Terraform Apply
+      - name: Terraform Apply
+        shell: powershell
+        run: |
+          terraform apply -auto-approve tfplan
