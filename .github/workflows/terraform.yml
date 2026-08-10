@@ -22,6 +22,12 @@ env:
   TF_BACKEND_CONTAINER: "tfstate"
   TF_BACKEND_KEY: "preprod.tfstate"
 
+  # Azure Service Principal authentication for Terraform azurerm provider & backend
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
   # Allow node 20 execution compatibility
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
 
@@ -103,4 +109,6 @@ jobs:
       - name: Terraform Apply
         id: apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve tfplan
+
+        
