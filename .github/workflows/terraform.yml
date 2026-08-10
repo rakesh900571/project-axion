@@ -66,12 +66,7 @@ jobs:
 
       - name: Terraform Init
         id: init
-        run: |
-          terraform init \
-            -backend-config="resource_group_name= RG-RAKESH" \
-            -backend-config="storage_account_name=dev9005711880" \
-            -backend-config="container_name=tfstate" \
-            -backend-config="key=infra.terraform.tfstate"
+        run: terraform init -backend-config="resource_group_name=RG-RAKESH" -backend-config="storage_account_name=dev9005711880" -backend-config="container_name=tfstate" -backend-config="key=infra.terraform.tfstate"
 
       - name: Terraform Validate
         id: validate
