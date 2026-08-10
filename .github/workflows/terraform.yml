@@ -2,14 +2,14 @@ name: Terraform Azure Infrastructure
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "environments/preprod/**"
-      - ".github/workflows/terraform-azure.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "environments/preprod/**"
+    branches: main
+  #   paths:
+  #     - "environments/preprod/**"
+  #     - ".github/workflows/terraform-azure.yml"
+  # pull_request:
+  #   branches: [main]
+  #   paths:
+  #     - "environments/preprod/**"
   # workflow_dispatch: {}
 
 # Required so the OIDC token can be requested and the checkout works
