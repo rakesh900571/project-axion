@@ -14,9 +14,10 @@ permissions:
 
 jobs:
 
-  # =========================================================
+  # =========================
   # TERRAFORM PLAN
-  # =========================================================
+  # =========================
+
   terraform-plan:
     name: Terraform Plan
     runs-on: [self-hosted, windows, x64]
@@ -29,60 +30,12 @@ jobs:
 
     steps:
 
-      # Checkout Repository
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # Check Azure Secrets
-      - name: Check Azure Secrets
-        shell: powershell
-        run: |
-          $missing = $false
-
-          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_CLIENT_ID }}")) {
-            Write-Host "ERROR: AZURE_CLIENT_ID is EMPTY"
-            $missing = $true
-          }
-          else {
-            Write-Host "AZURE_CLIENT_ID is available"
-          }
-
-          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_CLIENT_SECRET }}")) {
-            Write-Host "ERROR: AZURE_CLIENT_SECRET is EMPTY"
-            $missing = $true
-          }
-          else {
-            Write-Host "AZURE_CLIENT_SECRET is available"
-          }
-
-          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_SUBSCRIPTION_ID }}")) {
-            Write-Host "ERROR: AZURE_SUBSCRIPTION_ID is EMPTY"
-            $missing = $true
-          }
-          else {
-            Write-Host "AZURE_SUBSCRIPTION_ID is available"
-          }
-
-          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_TENANT_ID }}")) {
-            Write-Host "ERROR: AZURE_TENANT_ID is EMPTY"
-            $missing = $true
-          }
-          else {
-            Write-Host "AZURE_TENANT_ID is available"
-          }
-
-          if ($missing) {
-            Write-Error "One or more Azure secrets are missing."
-            exit 1
-          }
-
-          Write-Host "All Azure secrets are available."
-
-      # Azure Login
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -94,67 +47,33 @@ jobs:
               "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
             }
 
-      # Verify Azure Login
-      - name: Check Azure Account
-        shell: powershell
-        run: |
-          az account show
-
-      # Set Azure Subscription
-      - name: Set Azure Subscription
-        shell: powershell
-        run: |
-          az account set `
-            --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-
-      # Verify Subscription
-      - name: Verify Azure Subscription
-        shell: powershell
-        run: |
-          az account show
-
-      # Terraform Format
-      - name: Terraform Format
-        shell: powershell
-        run: |
-          terraform fmt -check -recursive
-
-      # Terraform Init
       - name: Terraform Init
         shell: powershell
-        run: |
-          terraform init
+        run: terraform init
 
-      # Terraform Validate
+      - name: Terraform Format
+        shell: powershell
+        run: terraform fmt -check -recursive
+
       - name: Terraform Validate
         shell: powershell
-        run: |
-          terraform validate
+        run: terraform validate
 
-      # Terraform Plan
       - name: Terraform Plan
         shell: powershell
-        run: |
-          terraform plan -out=tfplan
-
-      # Upload Terraform Plan
-      - name: Upload Terraform Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan
-          path: environments/preprod/tfplan
+        run: terraform plan
 
 
-  # =========================================================
+  # =========================
   # TERRAFORM APPLY
-  # =========================================================
+  # =========================
+
   terraform-apply:
     name: Terraform Apply
     runs-on: [self-hosted, windows, x64]
 
     needs: terraform-plan
 
-    # Apply only on push to main
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     environment: preprod
@@ -165,15 +84,12 @@ jobs:
 
     steps:
 
-      # Checkout Repository
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # Azure Login
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -185,28 +101,10 @@ jobs:
               "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
             }
 
-      # Set Azure Subscription
-      - name: Set Azure Subscription
-        shell: powershell
-        run: |
-          az account set `
-            --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-
-      # Terraform Init
       - name: Terraform Init
         shell: powershell
-        run: |
-          terraform init
+        run: terraform init
 
-      # Download Terraform Plan
-      - name: Download Terraform Plan
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-plan
-          path: environments/preprod
-
-      # Terraform Apply
       - name: Terraform Apply
         shell: powershell
-        run: |
-          terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve
