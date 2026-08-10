@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
     paths:
-      - "environment/preprod/**"
+      - "environments/preprod/**"
       - ".github/workflows/terraform-azure.yml"
   pull_request:
     branches: [main]
     paths:
-      - "environment/preprod/**"
-  workflow_dispatch: {}
+      - "environments/preprod/**"
+  # workflow_dispatch: {}
 
 # Required so the OIDC token can be requested and the checkout works
 permissions:
@@ -20,7 +20,7 @@ permissions:
 
 env:
   TF_VERSION: "1.6.6"
-  WORKING_DIR: "environment/preprod"
+  WORKING_DIR: "environments/preprod"
 
   # Remote state backend (Azure Storage) — set these as secrets/vars too
   TF_BACKEND_RG: RG-RAKESH
