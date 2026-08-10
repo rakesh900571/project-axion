@@ -2,17 +2,11 @@ name: Terraform Azure Infrastructure
 
 on:
   push:
-    branches: main
-  #   paths:
-  #     - "environments/preprod/**"
-  #     - ".github/workflows/terraform-azure.yml"
-  # pull_request:
-  #   branches: [main]
-  #   paths:
-  #     - "environments/preprod/**"
-  # workflow_dispatch: {}
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
 
-# Required so the OIDC token can be requested and the checkout works
 permissions:
   id-token: write
   contents: read
@@ -22,18 +16,19 @@ env:
   TF_VERSION: "1.6.6"
   WORKING_DIR: "environments/preprod"
 
-  # Remote state backend (Azure Storage) — set these as secrets/vars too
-  TF_BACKEND_RG: RG-RAKESH
-  TF_BACKEND_SA: dev9005711880
-  TF_BACKEND_CONTAINER: tfstate
+  # Remote state backend (Azure Storage)
+  TF_BACKEND_RG: "RG-RAKESH"
+  TF_BACKEND_SA: "dev9005711880"
+  TF_BACKEND_CONTAINER: "tfstate"
+  TF_BACKEND_KEY: "preprod.tfstate"
 
-  # Terraform input variable, since storage account names must be globally unique
-  # TF_VAR_storage_account_name: ${{ secrets.TF_STORAGE_ACCOUNT_NAME }}
+  # Allow node 20 execution compatibility
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
 
 jobs:
   terraform:
     name: Terraform
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ${{ env.WORKING_DIR }}
@@ -53,11 +48,11 @@ jobs:
               "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
             }
 
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
 
       - name: Terraform Format Check
         id: fmt
@@ -66,7 +61,12 @@ jobs:
 
       - name: Terraform Init
         id: init
-        run: terraform init -backend-config="resource_group_name=RG-RAKESH" -backend-config="storage_account_name=dev9005711880" -backend-config="container_name=tfstate" -backend-config="key=infra.terraform.tfstate"
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ env.TF_BACKEND_RG }}" \
+            -backend-config="storage_account_name=${{ env.TF_BACKEND_SA }}" \
+            -backend-config="container_name=${{ env.TF_BACKEND_CONTAINER }}" \
+            -backend-config="key=${{ env.TF_BACKEND_KEY }}"
 
       - name: Terraform Validate
         id: validate
@@ -103,4 +103,4 @@ jobs:
       - name: Terraform Apply
         id: apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve tfplan
