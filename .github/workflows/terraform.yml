@@ -46,18 +46,22 @@ jobs:
       - name: Terraform Init
         shell: powershell
         run: terraform init
+        working-directory: environments/preprod
 
       - name: Terraform Format
         shell: powershell
         run: terraform fmt -check
+        working-directory: environments/preprod
 
       - name: Terraform Validate
         shell: powershell
         run: terraform validate
+        working-directory: environments/preprod
 
       - name: Terraform Plan
         shell: powershell
         run: terraform plan
+        working-directory: environments/preprod
 
 
   terraform-apply:
@@ -96,7 +100,8 @@ jobs:
       - name: Terraform Init
         shell: powershell
         run: terraform init
-
+        working-directory: environments/preprod
       - name: Terraform Apply
         shell: powershell
         run: terraform apply -auto-approve
+        working-directory: environments/preprod
