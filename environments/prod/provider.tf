@@ -6,8 +6,15 @@ terraform {
       version = "4.80.0"
     }
   }
+  backend "azurerm" {
+    resource_group_name  = "RG-RAKESH"
+    storage_account_name = "dev9005711880"
+    container_name       = "tfstate"
+    key                  = "prod.tfstate"
+  }
 }
 
 provider "azurerm" {
   features {}
 }
+

@@ -1,115 +1,158 @@
-name: Terraform Azure Infrastructure
+name: "Azure Terraform CI/CD Pipeline"
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+    paths:
+      - 'environments/**'
+      - 'modules/**'
+      - '.github/workflows/terraform.yml'
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+    paths:
+      - 'environments/**'
+      - 'modules/**'
+      - '.github/workflows/terraform.yml'
   workflow_dispatch:
     inputs:
-      action:
-        description: 'Terraform Action to execute'
+      environment:
+        description: 'Target Environment'
         required: true
-        default: 'apply'
+        default: 'all'
         type: choice
         options:
-          - apply
-          - destroy
+          - all
+          - preprod
+          - prod
+      action:
+        description: 'Terraform Action'
+        required: true
+        default: 'plan_and_apply'
+        type: choice
+        options:
+          - plan_and_apply
+          - plan_only
+          - apply_only
 
 permissions:
-  id-token: write
   contents: read
   pull-requests: write
+  id-token: write
 
 env:
-  TF_VERSION: "1.6.6"
-  WORKING_DIR: "environments/preprod"
-
-  # Remote state backend (Azure Storage)
-  TF_BACKEND_RG: "RG-RAKESH"
-  TF_BACKEND_SA: "dev9005711880"
-  TF_BACKEND_CONTAINER: "tfstate"
-  TF_BACKEND_KEY: "preprod.tfstate"
-
-  # Azure Service Principal authentication for Terraform azurerm provider & backend
+  TERRAFORM_VERSION: "1.9.0"
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
   ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-
-  # Allow node 20 execution compatibility
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
 jobs:
-  terraform:
-    name: Terraform
+  # ==========================================
+  # Job 1: Linting and Code Quality Check
+  # ==========================================
+  terraform-fmt-lint:
+    name: "1. Code Quality & Format Check"
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIR }}
-
     steps:
-      - name: Checkout repository
+      - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: |
-            {
-              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
-              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
-              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
-              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
-            }
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ env.TF_VERSION }}
-          terraform_wrapper: false
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Terraform Format Check
-        id: fmt
+      - name: Check Terraform Formatting
         run: terraform fmt -check -recursive
-        continue-on-error: true
+
+  # ==========================================
+  # Job 2: Terraform Init & Plan (Matrix)
+  # ==========================================
+  terraform-plan:
+    name: "2. Plan (${{ matrix.environment }})"
+    needs: [terraform-fmt-lint]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [preprod, prod]
+    
+    # Skip if manual dispatch selected specific environment and this matrix item is not selected
+    if: |
+      github.event_name != 'workflow_dispatch' || 
+      github.event.inputs.environment == 'all' || 
+      github.event.inputs.environment == matrix.environment
+
+    defaults:
+      run:
+        working-directory: environments/${{ matrix.environment }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (Optional fallback if AZURE_CREDENTIALS secret is used)
+        if: ${{ secrets.AZURE_CREDENTIALS != '' }}
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Terraform Init
         id: init
-        run: |
-          terraform init \
-            -backend-config="resource_group_name=${{ env.TF_BACKEND_RG }}" \
-            -backend-config="storage_account_name=${{ env.TF_BACKEND_SA }}" \
-            -backend-config="container_name=${{ env.TF_BACKEND_CONTAINER }}" \
-            -backend-config="key=${{ env.TF_BACKEND_KEY }}"
+        run: terraform init
 
       - name: Terraform Validate
         id: validate
-        run: terraform validate
+        run: terraform validate -no-color
 
       - name: Terraform Plan
         id: plan
         run: |
-          if [ "${{ inputs.action || 'apply' }}" = "destroy" ]; then
-            echo "Generating destroy plan..."
-            terraform plan -destroy -no-color -out=tfplan
-          else
-            echo "Generating apply plan..."
-            terraform plan -no-color -out=tfplan
-          fi
-        continue-on-error: true
+          terraform plan -no-color -out=tfplan_${{ matrix.environment }}.tfplan
+        continue-on-error: false
 
-      - name: Post Plan Result to PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+      - name: Create Human Readable Plan Summary
+        run: |
+          echo "### Environment: `${{ matrix.environment }}`" >> $GITHUB_STEP_SUMMARY
+          echo "#### Terraform Plan Output" >> $GITHUB_STEP_SUMMARY
+          echo '```hcl' >> $GITHUB_STEP_SUMMARY
+          terraform show -no-color tfplan_${{ matrix.environment }}.tfplan | head -n 250 >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Terraform Plan Artifact
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const output = `#### Terraform Format: \`${{ steps.fmt.outcome }}\`
-            #### Terraform Init: \`${{ steps.init.outcome }}\`
-            #### Terraform Validate: \`${{ steps.validate.outcome }}\`
-            #### Terraform Plan: \`${{ steps.plan.outcome }}\`
+          name: tfplan-${{ matrix.environment }}
+          path: environments/${{ matrix.environment }}/tfplan_${{ matrix.environment }}.tfplan
+          retention-days: 7
 
-            *Pushed by @${{ github.actor }}, action: \`${{ github.event_name }}\`*`;
+      - name: Post Plan to Pull Request
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const output = `### Terraform Plan Summary (\`${{ matrix.environment }}\`)
+            #### Initialization: \`${{ steps.init.outcome }}\`
+            #### Validation: \`${{ steps.validate.outcome }}\`
+            #### Plan Status: \`${{ steps.plan.outcome }}\`
+
+            <details><summary>Show Plan Details</summary>
+
+            \`\`\`hcl
+            ${process.env.PLAN_OUTPUT || 'Plan generated successfully.'}
+            \`\`\`
+
+            </details>`;
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -117,14 +160,54 @@ jobs:
               body: output
             });
 
-      - name: Fail if Plan Failed
-        if: steps.plan.outcome == 'failure'
-        run: exit 1
+  # ==========================================
+  # Job 3: Terraform Apply (Matrix)
+  # ==========================================
+  terraform-apply:
+    name: "3. Apply (${{ matrix.environment }})"
+    needs: [terraform-plan]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [preprod, prod]
 
-      # Execute Apply or Destroy on main branch push or manual workflow dispatch
-      - name: Terraform Apply / Destroy
-        id: apply
-        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        run: terraform apply -auto-approve tfplan
+    # Only run apply on push to main or manual dispatch (when plan_and_apply or apply_only selected)
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && 
+        (github.event.inputs.action == 'plan_and_apply' || github.event.inputs.action == 'apply_only') &&
+        (github.event.inputs.environment == 'all' || github.event.inputs.environment == matrix.environment))
 
-        
+    environment: ${{ matrix.environment }}
+
+    defaults:
+      run:
+        working-directory: environments/${{ matrix.environment }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (Optional fallback if AZURE_CREDENTIALS secret is used)
+        if: ${{ secrets.AZURE_CREDENTIALS != '' }}
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Download Terraform Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ matrix.environment }}
+          path: environments/${{ matrix.environment }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan_${{ matrix.environment }}.tfplan
