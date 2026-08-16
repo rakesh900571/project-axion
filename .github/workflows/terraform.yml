@@ -92,13 +92,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [preprod, prod]
-    
-    # Skip if manual dispatch selected specific environment and this matrix item is not selected
+        environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment != 'all') && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["preprod", "prod"]') }}
+
+    # Skip if manual dispatch selected apply_only
     if: |
       github.event_name != 'workflow_dispatch' || 
-      github.event.inputs.environment == 'all' || 
-      github.event.inputs.environment == matrix.environment
+      github.event.inputs.action != 'apply_only'
 
     defaults:
       run:
@@ -186,14 +185,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [preprod, prod]
+        environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment != 'all') && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["preprod", "prod"]') }}
 
     # Only run apply on push to main or manual dispatch (when plan_and_apply or apply_only selected)
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && 
-        (github.event.inputs.action == 'plan_and_apply' || github.event.inputs.action == 'apply_only') &&
-        (github.event.inputs.environment == 'all' || github.event.inputs.environment == matrix.environment))
+        (github.event.inputs.action == 'plan_and_apply' || github.event.inputs.action == 'apply_only'))
 
     environment: ${{ matrix.environment }}
 
