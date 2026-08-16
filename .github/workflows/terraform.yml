@@ -167,7 +167,7 @@ jobs:
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
 
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' && 
         (github.event.inputs.action == 'plan_and_apply' || github.event.inputs.action == 'apply_only'))
 
