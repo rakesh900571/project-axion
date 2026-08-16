@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/*
     paths:
       - 'environments/**'
       - 'modules/**'
@@ -17,6 +18,16 @@ on:
       - '.github/workflows/terraform.yml'
   workflow_dispatch:
     inputs:
+      runner:
+        description: 'GitHub-Hosted Runner OS'
+        required: true
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - ubuntu-latest
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - windows-latest
       environment:
         description: 'Target Environment'
         required: true
@@ -43,6 +54,7 @@ permissions:
 
 env:
   TERRAFORM_VERSION: "1.9.0"
+  DEFAULT_RUNNER: "ubuntu-latest" # GitHub-Hosted Runner
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
   ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -54,7 +66,8 @@ jobs:
   # ==========================================
   terraform-fmt-lint:
     name: "1. Code Quality & Format Check"
-    runs-on: ubuntu-latest
+    # GitHub-Hosted Runner configuration
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -73,7 +86,8 @@ jobs:
   terraform-plan:
     name: "2. Plan (${{ matrix.environment }})"
     needs: [terraform-fmt-lint]
-    runs-on: ubuntu-latest
+    # GitHub-Hosted Runner configuration
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -166,7 +180,8 @@ jobs:
   terraform-apply:
     name: "3. Apply (${{ matrix.environment }})"
     needs: [terraform-plan]
-    runs-on: ubuntu-latest
+    # GitHub-Hosted Runner configuration
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
