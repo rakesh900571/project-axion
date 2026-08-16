@@ -1,4 +1,4 @@
-name: "Azure Terraform CI/CD Pipeline"
+name: "Azure Terraform CI/CD Pipeline (Preprod)"
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
       - main
       - feature/*
     paths:
-      - 'environments/**'
+      - 'environments/preprod/**'
       - 'modules/**'
       - '.github/workflows/terraform.yml'
   pull_request:
     branches:
       - main
     paths:
-      - 'environments/**'
+      - 'environments/preprod/**'
       - 'modules/**'
       - '.github/workflows/terraform.yml'
   workflow_dispatch:
@@ -28,15 +28,6 @@ on:
           - ubuntu-22.04
           - ubuntu-24.04
           - windows-latest
-      environment:
-        description: 'Target Environment'
-        required: true
-        default: 'all'
-        type: choice
-        options:
-          - all
-          - preprod
-          - prod
       action:
         description: 'Terraform Action'
         required: true
@@ -67,7 +58,6 @@ jobs:
   # ==========================================
   terraform-fmt-lint:
     name: "1. Code Quality & Format Check"
-    # GitHub-Hosted Runner configuration
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     steps:
       - name: Checkout Code
@@ -82,26 +72,20 @@ jobs:
         run: terraform fmt -check -recursive
 
   # ==========================================
-  # Job 2: Terraform Init & Plan (Matrix)
+  # Job 2: Terraform Init & Plan (Preprod)
   # ==========================================
   terraform-plan:
-    name: "2. Plan (${{ matrix.environment }})"
+    name: "2. Plan (preprod)"
     needs: [terraform-fmt-lint]
-    # GitHub-Hosted Runner configuration
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment != 'all') && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["preprod", "prod"]') }}
 
-    # Skip if manual dispatch selected apply_only
     if: |
       github.event_name != 'workflow_dispatch' || 
       github.event.inputs.action != 'apply_only'
 
     defaults:
       run:
-        working-directory: environments/${{ matrix.environment }}
+        working-directory: environments/preprod
 
     steps:
       - name: Checkout Code
@@ -129,22 +113,22 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: |
-          terraform plan -no-color -out=tfplan_${{ matrix.environment }}.tfplan
+          terraform plan -no-color -out=tfplan_preprod.tfplan
         continue-on-error: false
 
       - name: Create Human Readable Plan Summary
         run: |
-          echo "### Environment: `${{ matrix.environment }}`" >> $GITHUB_STEP_SUMMARY
+          echo "### Environment: \`preprod\`" >> $GITHUB_STEP_SUMMARY
           echo "#### Terraform Plan Output" >> $GITHUB_STEP_SUMMARY
           echo '```hcl' >> $GITHUB_STEP_SUMMARY
-          terraform show -no-color tfplan_${{ matrix.environment }}.tfplan | head -n 250 >> $GITHUB_STEP_SUMMARY
+          terraform show -no-color tfplan_preprod.tfplan | head -n 250 >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload Terraform Plan Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-${{ matrix.environment }}
-          path: environments/${{ matrix.environment }}/tfplan_${{ matrix.environment }}.tfplan
+          name: tfplan-preprod
+          path: environments/preprod/tfplan_preprod.tfplan
           retention-days: 7
 
       - name: Post Plan to Pull Request
@@ -154,7 +138,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const output = `### Terraform Plan Summary (\`${{ matrix.environment }}\`)
+            const output = `### Terraform Plan Summary (\`preprod\`)
             #### Initialization: \`${{ steps.init.outcome }}\`
             #### Validation: \`${{ steps.validate.outcome }}\`
             #### Plan Status: \`${{ steps.plan.outcome }}\`
@@ -175,29 +159,23 @@ jobs:
             });
 
   # ==========================================
-  # Job 3: Terraform Apply (Matrix)
+  # Job 3: Terraform Apply (Preprod)
   # ==========================================
   terraform-apply:
-    name: "3. Apply (${{ matrix.environment }})"
+    name: "3. Apply (preprod)"
     needs: [terraform-plan]
-    # GitHub-Hosted Runner configuration
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment != 'all') && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["preprod", "prod"]') }}
 
-    # Only run apply on push to main or manual dispatch (when plan_and_apply or apply_only selected)
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && 
         (github.event.inputs.action == 'plan_and_apply' || github.event.inputs.action == 'apply_only'))
 
-    environment: ${{ matrix.environment }}
+    environment: preprod
 
     defaults:
       run:
-        working-directory: environments/${{ matrix.environment }}
+        working-directory: environments/preprod
 
     steps:
       - name: Checkout Code
@@ -217,11 +195,11 @@ jobs:
       - name: Download Terraform Plan Artifact
         uses: actions/download-artifact@v4
         with:
-          name: tfplan-${{ matrix.environment }}
-          path: environments/${{ matrix.environment }}
+          name: tfplan-preprod
+          path: environments/preprod
 
       - name: Terraform Init
         run: terraform init
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan_${{ matrix.environment }}.tfplan
+        run: terraform apply -auto-approve tfplan_preprod.tfplan
